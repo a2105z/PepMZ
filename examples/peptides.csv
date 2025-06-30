@@ -1,0 +1,7 @@
+sequence,charges,modifications
+PEPTIDE,2;3,
+MYPEPTIDE,2,Oxidation (M)@1
+SAMPLER,2,Phospho (S)@1
+DFPIAMGER,2,Oxidation (M)@6
+PEPTIDE,2,Amidated (C-term)@C
+PEPTIDE,2,Acetyl (N-term)@N;Amidated (C-term)@C

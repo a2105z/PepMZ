@@ -1,0 +1,5 @@
+# Example peptide list for PepMZ batch mode
+PEPTIDE
+MYPEPTIDE
+SAMPLER
+DFPIAMGER
