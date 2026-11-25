@@ -27,6 +27,7 @@ from pep_mz.core.fragments import theoretical_fragments
 from pep_mz.core.isotopes import theoretical_isotope_peaks
 from pep_mz.core.modifications import list_common_modifications
 from pep_mz.core.validation import ValidationError
+from pep_mz.ml.retention import predict_retention
 from pep_mz.models.results import BatchRowResult, ModificationSpec
 
 
@@ -136,6 +137,14 @@ def _show_result(result, *, compare=None, mods=None):
     c2.metric("Average mass", f"{result.average_mass:.6f} Da")
     c3.metric("Formula", result.formula)
     c4.metric("Unimod string", result.sequence_unimod)
+
+    retention = predict_retention(result.sequence_unmodified)
+    st.caption(
+        f"Learned retention index {retention.index:+.2f} for {retention.sequence}. "
+        "Higher means the peptide is more hydrophobic and should elute later on a "
+        "reversed-phase column. PyTorch predicts this from the sequence. "
+        "The masses above still come from pyOpenMS."
+    )
 
     if result.modifications:
         st.write("**Modifications**")

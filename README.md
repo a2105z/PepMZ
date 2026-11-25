@@ -48,6 +48,7 @@ Make powerful scientific computation accessible **without compromising the scien
 | Theoretical b/y fragment ions (OpenMS TSG) | ✅ |
 | In-app tutorial | ✅ |
 | Optional NL intent parse + explanations | ✅ (rules; optional OpenAI refine) |
+| PyTorch retention index from the peptide sequence | ✅ |
 | Experimental spectrum identification | ❌ (out of scope) |
 
 ---
@@ -93,6 +94,10 @@ PepMZ/
 ```
 
 ---
+
+## Retention index
+
+After the mass is calculated, PepMZ also reports a **retention index**. A small PyTorch network reads the unmodified sequence and predicts how hydrophobic the peptide is, on the Kyte–Doolittle scale. A higher index should stick longer to a reversed-phase column and come off later. The network does not calculate mass, charge, or m/z. Those stay with pyOpenMS.
 
 ## How peptide m/z calculation works (conceptually)
 
