@@ -24,6 +24,7 @@ from pep_mz.core.batch import (
 )
 from pep_mz.core.calculator import calculate_peptide, compare_modified_vs_unmodified
 from pep_mz.core.fragments import theoretical_fragments
+from pep_mz.core.gpu_screen import screen_protein
 from pep_mz.core.isotopes import theoretical_isotope_peaks
 from pep_mz.core.modifications import list_common_modifications
 from pep_mz.core.validation import ValidationError
@@ -46,7 +47,7 @@ def _sidebar():
     )
     mode = st.sidebar.radio(
         "Workflow",
-        ["Single peptide", "Batch", "Tutorial", "Optional AI assist"],
+        ["Single peptide", "Batch", "GPU screen", "Tutorial", "Optional AI assist"],
         index=0,
     )
     with st.sidebar.expander("What is m/z?", expanded=False):
@@ -451,6 +452,79 @@ def page_ai():
                 st.error(str(exc))
 
 
+def page_gpu():
+    st.header("GPU precursor screen")
+    st.write(
+        "Trypsin digest, then one PyTorch pass for theoretical precursor m/z "
+        "at every charge. CUDA is used when this PyTorch build can see a GPU. "
+        "Otherwise the same tensor code runs on CPU. A sample of rows is checked "
+        "against pyOpenMS."
+    )
+    example = (
+        ">example bovine serum albumin N-terminus\n"
+        "MKWVTFISLLFLFSSAYSRGVFRRDTHKSEIAHRFKDLGEEHFKGLVLIAFSQYLQQCPFDEHVK\n"
+    )
+    sequence = st.text_area("Protein sequence or FASTA", value=example, height=140)
+    cols = st.columns(4)
+    with cols[0]:
+        missed = st.number_input("Missed cleavages", min_value=0, max_value=5, value=1)
+    with cols[1]:
+        min_len = st.number_input("Min length", min_value=1, max_value=80, value=6)
+    with cols[2]:
+        max_len = st.number_input("Max length", min_value=1, max_value=80, value=40)
+    with cols[3]:
+        charges = _charge_selector([2, 3])
+
+    if st.button("Screen precursors", type="primary"):
+        try:
+            if not charges:
+                st.error("Select at least one charge state.")
+                return
+            _peptides, result = screen_protein(
+                sequence,
+                charges,
+                missed_cleavages=int(missed),
+                min_length=int(min_len),
+                max_length=int(max_len),
+            )
+        except ValidationError as exc:
+            st.error(str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Unexpected error: {exc}")
+            return
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Peptides", len(result.rows))
+        m2.metric("Device", result.device)
+        m3.metric("Tensor time", f"{result.elapsed_ms:.2f} ms")
+        m4.metric("Max |Δ| vs OpenMS", f"{result.openms_max_abs_delta:.2e}")
+        st.caption(
+            f"Checked {result.openms_checked} peptides against pyOpenMS. "
+            "Masses are neutral [M]. m/z is the protonated precursor [M+zH]z+."
+        )
+        frame = pd.DataFrame(
+            [
+                {
+                    "sequence": row.sequence,
+                    "start": row.start,
+                    "end": row.end,
+                    "missed_cleavages": row.missed_cleavages,
+                    "mono_mass": row.mono_mass,
+                    **{f"mz_{z}+": row.mz_by_charge[z] for z in result.charges},
+                }
+                for row in result.rows
+            ]
+        )
+        st.dataframe(frame, width="stretch", hide_index=True)
+        st.download_button(
+            "Download CSV",
+            data=frame.to_csv(index=False),
+            file_name="pepmz_precursors.csv",
+            mime="text/csv",
+        )
+
+
 def main():
     mode = _sidebar()
     st.title("PepMZ")
@@ -459,6 +533,8 @@ def main():
         page_single()
     elif mode == "Batch":
         page_batch()
+    elif mode == "GPU screen":
+        page_gpu()
     elif mode == "Tutorial":
         page_tutorial()
     else:

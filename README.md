@@ -48,6 +48,7 @@ Make powerful scientific computation accessible **without compromising the scien
 | Theoretical b/y fragment ions (OpenMS TSG) | ✅ |
 | In-app tutorial | ✅ |
 | Optional NL intent parse + explanations | ✅ (rules; optional OpenAI refine) |
+| Trypsin digest + PyTorch precursor screen (CUDA or CPU) | ✅ |
 | Experimental spectrum identification | ❌ (out of scope) |
 
 ---
@@ -69,6 +70,11 @@ Input (UI / batch / optional NL parse)
         ├── masses + m/z results
         ├── optional isotope peaks
         └── CSV / JSON export
+
+ GPU screen (PyTorch)
+        │
+        ├── trypsin peptides from a protein
+        └── batched [M] and [M+zH]z+ on CUDA, or the same code on CPU
 ```
 
 Package layout:
@@ -79,6 +85,7 @@ PepMZ/
 ├── pep_mz/
 │   ├── core/
 │   │   ├── calculator.py  # pyOpenMS calculations
+│   │   ├── gpu_screen.py  # trypsin digest + PyTorch precursor screen
 │   │   ├── validation.py
 │   │   ├── modifications.py
 │   │   ├── batch.py
@@ -93,6 +100,20 @@ PepMZ/
 ```
 
 ---
+
+## GPU precursor screen
+
+The **GPU screen** workflow is for a whole protein, not one peptide.
+
+1. Trypsin cuts after K or R, unless the next residue is P. Missed cleavages stay in the peptide.
+2. Every peptide is scored in one PyTorch tensor: neutral monoisotopic mass, then m/z for each requested charge.
+3. Residue masses and the proton mass are read from pyOpenMS, and a sample of rows is checked back against `AASequence`.
+
+CUDA is selected automatically when the installed PyTorch can see an NVIDIA GPU. With a CPU-only PyTorch, including the default macOS install, the identical code runs on CPU. Install a CUDA build of PyTorch on an NVIDIA machine to take the GPU path. This screen does not search experimental spectra.
+
+```bash
+# In the app, choose "GPU screen" in the sidebar after `streamlit run app.py`.
+```
 
 ## How peptide m/z calculation works (conceptually)
 
