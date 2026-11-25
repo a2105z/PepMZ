@@ -455,10 +455,10 @@ def page_ai():
 def page_gpu():
     st.header("GPU precursor screen")
     st.write(
-        "Trypsin digest, then one PyTorch pass for theoretical precursor m/z "
-        "at every charge. CUDA is used when this PyTorch build can see a GPU. "
-        "Otherwise the same tensor code runs on CPU. A sample of rows is checked "
-        "against pyOpenMS."
+        "Trypsin digest, then one precursor m/z per peptide. On an NVIDIA GPU this "
+        "launches native/precursor_kernel.cu, with one CUDA thread per peptide. "
+        "On this machine the same arithmetic runs on the CPU unless that kernel "
+        "has been built. A sample of rows is checked against pyOpenMS."
     )
     example = (
         ">example bovine serum albumin N-terminus\n"

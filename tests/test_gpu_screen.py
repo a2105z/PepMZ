@@ -46,6 +46,21 @@ def test_protein_screen_covers_every_digest_peptide():
     assert all(row.end >= row.start for row in result.rows)
 
 
+def test_cuda_kernel_is_real_and_unavailable_on_this_machine():
+    from pathlib import Path
+
+    from pep_mz.core.cuda_precursor import cuda_status
+
+    source = Path("native/precursor_kernel.cu").read_text()
+    assert "__global__ void precursor_kernel" in source
+    assert "pepmz_precursor_launch" in source
+    assert "cudaMalloc" in source
+    status = cuda_status()
+    assert status.available is False
+    with pytest.raises(ValidationError, match="CUDA was requested"):
+        screen_peptides(["PEPTIDE"], [2], device="cuda")
+
+
 def test_rejects_empty_and_ambiguous_protein():
     with pytest.raises(ValidationError):
         screen_protein("   ", [2])

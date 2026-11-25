@@ -1,10 +1,10 @@
-"""Batched theoretical precursor m/z on PyTorch.
+"""Batched theoretical precursor m/z.
 
-pyOpenMS remains the reference for a single peptide. This module digests a
-protein with trypsin and scores every resulting peptide in one tensor pass.
-The same code runs on CUDA when ``torch.cuda.is_available()`` and on CPU
-otherwise. Residue masses and the proton mass are taken from pyOpenMS, so the
-screen is a faster layout of that arithmetic, not a second mass table.
+pyOpenMS remains the reference for a single peptide. A protein is digested
+with trypsin, then every peptide is scored together. On an NVIDIA machine the
+score runs in ``native/precursor_kernel.cu`` (one CUDA thread per peptide).
+Everywhere else the same arithmetic runs as a PyTorch CPU tensor pass.
+Residue masses and the proton mass come from pyOpenMS.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import pyopenms as oms
 import torch
 
 from pep_mz.core.calculator import calculate_peptide
+from pep_mz.core.cuda_precursor import cuda_status, launch_precursor
 from pep_mz.core.validation import ValidationError, validate_charges, validate_sequence
 
 STANDARD = "ACDEFGHIKLMNPQRSTVWY"
@@ -179,23 +180,40 @@ def screen_peptides(
             seq = validate_sequence(item).sequence
             spans.append(DigestPeptide(seq, 1, len(seq), 0))
 
-    dev = resolve_device(device)
     table, water, proton = _mass_constants()
-    table = table.to(dev)
-    encoded = _encode([span.sequence for span in spans]).to(dev)
-    charge_t = torch.tensor(zs, dtype=torch.float64, device=dev)
+    status = cuda_status()
+    use_cuda = status.available and device in (None, "cuda")
+    if device == "cuda" and not status.available:
+        raise ValidationError(
+            "CUDA was requested, but the precursor kernel is not available. "
+            f"{status.reason}"
+        )
 
-    if dev.type == "cuda":
-        torch.cuda.synchronize()
-    started = time.perf_counter()
-    mono = table[encoded].sum(dim=1) + water
-    mz = (mono.unsqueeze(1) + charge_t * proton) / charge_t
-    if dev.type == "cuda":
-        torch.cuda.synchronize()
-    elapsed_ms = (time.perf_counter() - started) * 1000
-
-    mono_cpu = mono.detach().cpu().tolist()
-    mz_cpu = mz.detach().cpu().tolist()
+    if use_cuda:
+        mono_cpu, mz_cpu, elapsed_ms = launch_precursor(
+            [span.sequence for span in spans],
+            zs,
+            table.detach().cpu().tolist(),
+            water,
+            proton,
+        )
+        dev_name = f"cuda ({status.device_count} GPU)"
+    else:
+        dev = resolve_device("cpu" if device is None else device)
+        table = table.to(dev)
+        encoded = _encode([span.sequence for span in spans]).to(dev)
+        charge_t = torch.tensor(zs, dtype=torch.float64, device=dev)
+        if dev.type == "cuda":
+            torch.cuda.synchronize()
+        started = time.perf_counter()
+        mono = table[encoded].sum(dim=1) + water
+        mz = (mono.unsqueeze(1) + charge_t * proton) / charge_t
+        if dev.type == "cuda":
+            torch.cuda.synchronize()
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        mono_cpu = mono.detach().cpu().tolist()
+        mz_cpu = mz.detach().cpu().tolist()
+        dev_name = str(dev)
     rows = [
         PrecursorRow(
             sequence=span.sequence,
@@ -223,7 +241,7 @@ def screen_peptides(
         check_n = len(checked_idx)
 
     return ScreenResult(
-        device=str(dev),
+        device=dev_name,
         elapsed_ms=elapsed_ms,
         charges=zs,
         rows=rows,

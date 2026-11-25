@@ -48,7 +48,8 @@ Make powerful scientific computation accessible **without compromising the scien
 | Theoretical b/y fragment ions (OpenMS TSG) | ✅ |
 | In-app tutorial | ✅ |
 | Optional NL intent parse + explanations | ✅ (rules; optional OpenAI refine) |
-| Trypsin digest + PyTorch precursor screen (CUDA or CPU) | ✅ |
+| Trypsin digest + precursor screen | ✅ |
+| CUDA kernel, one thread per peptide (`native/precursor_kernel.cu`) | ✅ source; runs on NVIDIA |
 | Experimental spectrum identification | ❌ (out of scope) |
 
 ---
@@ -82,10 +83,14 @@ Package layout:
 ```text
 PepMZ/
 ├── app.py                 # streamlit run app.py
+├── native/
+│   ├── precursor_kernel.cu  # one CUDA thread per peptide
+│   └── build.sh
 ├── pep_mz/
 │   ├── core/
 │   │   ├── calculator.py  # pyOpenMS calculations
-│   │   ├── gpu_screen.py  # trypsin digest + PyTorch precursor screen
+│   │   ├── gpu_screen.py  # trypsin digest + precursor screen
+│   │   ├── cuda_precursor.py
 │   │   ├── validation.py
 │   │   ├── modifications.py
 │   │   ├── batch.py
@@ -101,19 +106,22 @@ PepMZ/
 
 ---
 
-## GPU precursor screen
+## CUDA precursor kernel
 
-The **GPU screen** workflow is for a whole protein, not one peptide.
+The GPU workflow is for a whole protein.
 
 1. Trypsin cuts after K or R, unless the next residue is P. Missed cleavages stay in the peptide.
-2. Every peptide is scored in one PyTorch tensor: neutral monoisotopic mass, then m/z for each requested charge.
-3. Residue masses and the proton mass are read from pyOpenMS, and a sample of rows is checked back against `AASequence`.
+2. Each peptide becomes one CUDA thread in `native/precursor_kernel.cu`. The thread sums residue masses from constant memory and writes neutral `[M]` plus `[M+zH]z+` m/z.
+3. Those masses are the pyOpenMS residue and proton masses. A sample of rows is checked back against `AASequence`.
 
-CUDA is selected automatically when the installed PyTorch can see an NVIDIA GPU. With a CPU-only PyTorch, including the default macOS install, the identical code runs on CPU. Install a CUDA build of PyTorch on an NVIDIA machine to take the GPU path. This screen does not search experimental spectra.
+Build and run it on a computer with an NVIDIA GPU and `nvcc`:
 
 ```bash
-# In the app, choose "GPU screen" in the sidebar after `streamlit run app.py`.
+./native/build.sh
+streamlit run app.py
 ```
+
+Choose **GPU screen**. The device line reads `cuda` only after that library loads and `cudaGetDeviceCount` sees a GPU. On a Mac the same screen stays on the CPU tensor path. This is not a spectrum search engine.
 
 ## How peptide m/z calculation works (conceptually)
 
