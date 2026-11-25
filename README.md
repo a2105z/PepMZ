@@ -48,8 +48,6 @@ Make powerful scientific computation accessible **without compromising the scien
 | Theoretical b/y fragment ions (OpenMS TSG) | ✅ |
 | In-app tutorial | ✅ |
 | Optional NL intent parse + explanations | ✅ (rules; optional OpenAI refine) |
-| Trypsin digest + precursor screen | ✅ |
-| CUDA kernel, one thread per peptide (`native/precursor_kernel.cu`) | ✅ source; runs on NVIDIA |
 | Experimental spectrum identification | ❌ (out of scope) |
 
 ---
@@ -71,11 +69,6 @@ Input (UI / batch / optional NL parse)
         ├── masses + m/z results
         ├── optional isotope peaks
         └── CSV / JSON export
-
- GPU screen (PyTorch)
-        │
-        ├── trypsin peptides from a protein
-        └── batched [M] and [M+zH]z+ on CUDA, or the same code on CPU
 ```
 
 Package layout:
@@ -83,14 +76,9 @@ Package layout:
 ```text
 PepMZ/
 ├── app.py                 # streamlit run app.py
-├── native/
-│   ├── precursor_kernel.cu  # one CUDA thread per peptide
-│   └── build.sh
 ├── pep_mz/
 │   ├── core/
 │   │   ├── calculator.py  # pyOpenMS calculations
-│   │   ├── gpu_screen.py  # trypsin digest + precursor screen
-│   │   ├── cuda_precursor.py
 │   │   ├── validation.py
 │   │   ├── modifications.py
 │   │   ├── batch.py
@@ -105,23 +93,6 @@ PepMZ/
 ```
 
 ---
-
-## CUDA precursor kernel
-
-The GPU workflow is for a whole protein.
-
-1. Trypsin cuts after K or R, unless the next residue is P. Missed cleavages stay in the peptide.
-2. Each peptide becomes one CUDA thread in `native/precursor_kernel.cu`. The thread sums residue masses from constant memory and writes neutral `[M]` plus `[M+zH]z+` m/z.
-3. Those masses are the pyOpenMS residue and proton masses. A sample of rows is checked back against `AASequence`.
-
-Build and run it on a computer with an NVIDIA GPU and `nvcc`:
-
-```bash
-./native/build.sh
-streamlit run app.py
-```
-
-Choose **GPU screen**. The device line reads `cuda` only after that library loads and `cudaGetDeviceCount` sees a GPU. On a Mac the same screen stays on the CPU tensor path. This is not a spectrum search engine.
 
 ## How peptide m/z calculation works (conceptually)
 
